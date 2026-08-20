@@ -52,6 +52,13 @@ RUN \
   DEBIAN_FRONTEND=noninteractive apt-get purge -y \
     xterm 2>/dev/null || true && \
   DEBIAN_FRONTEND=noninteractive apt-get autoremove -y && \
+  echo "**** harden: pin the unauthenticated listeners to loopback ****" && \
+  sed -i "s/-interface 0\\.0\\.0\\.0/-interface 127.0.0.1/" \
+    /etc/s6-overlay/s6-rc.d/svc-kasmvnc/run && \
+  sed -i "s|http.listen(6900);|http.listen(6900, '127.0.0.1');|" \
+    /kclient/index.js && \
+  grep -q -- "-interface 127.0.0.1" /etc/s6-overlay/s6-rc.d/svc-kasmvnc/run && \
+  grep -q "http.listen(6900, '127.0.0.1');" /kclient/index.js && \
   echo "**** brand the web client ****" && \
   cp /usr/share/AnycubicSlicerNext/resources/images/AnycubicSlicer.png /kclient/public/icon.png && \
   echo "**** cleanup ****" && \
@@ -62,6 +69,14 @@ RUN \
     /var/lib/apt/lists/* \
     /var/tmp/* \
     /tmp/*
+
+# The two seds above are load-bearing security fixes, not cosmetics. The base
+# image starts Xvnc with `-disableBasicAuth -SecurityTypes None -interface
+# 0.0.0.0` on 6901 and kclient with `http.listen(6900)`; both serve the full
+# desktop with no authentication, and both sit behind nginx. Under
+# `network_mode: host` that published them straight onto the LAN, bypassing the
+# basic-auth gate. The `grep -q` guards make the build FAIL if an updated base
+# image changes those lines, so the hole cannot silently reopen.
 
 # root/etc/s6-overlay/.../init-asn-perms fixes ownership of the slicer's
 # resource tree at container start -- it cannot be done here, because

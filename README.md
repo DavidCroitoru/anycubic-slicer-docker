@@ -67,8 +67,9 @@ interface. Three things are changed here:
   `-disableBasicAuth -SecurityTypes None -interface 0.0.0.0` and kclient with
   `http.listen(6900)`. Both hand out the full desktop with no authentication whatsoever,
   and both sit *behind* nginx — so with host networking they were reachable from the LAN
-  directly, bypassing the basic-auth gate entirely. `root/etc/s6-overlay/s6-rc.d/svc-kasmvnc/run`
-  and `.../svc-kclient/run` override that. nginx on 3000/3001 is the only front door.
+  directly, bypassing the basic-auth gate entirely. The Dockerfile rewrites both listeners at
+  build time, with `grep -q` guards that fail the build if an updated base image changes those
+  lines. nginx on 3000/3001 is the only front door.
 - **nginx honours `BIND_ADDRESS`.** The stock template listens on `0.0.0.0` and `[::]`
   unconditionally; `init-asn-bind` rewrites it.
 - **No terminal emulator.** `xterm` is purged from the image and removed from the Openbox
@@ -255,6 +256,8 @@ root/etc/s6-overlay/s6-rc.d/
   init-asn-perms/       fixes resource-tree ownership after the PUID remap
   init-asn-autostart/   migrates stale autostart/menu copies in /config
   init-asn-bind/        applies BIND_ADDRESS to nginx
-  svc-kasmvnc/run       overrides Xvnc's listener onto loopback
-  svc-kclient/run       overrides kclient's listener onto loopback
 ```
+
+Xvnc's and kclient's listeners are moved onto loopback by `sed` in the Dockerfile rather
+than by shipping modified copies of the base image's scripts — the copies would go stale
+on every base image update, and the guarded build fails loudly instead.
