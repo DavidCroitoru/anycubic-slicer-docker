@@ -12,6 +12,8 @@ distribution it expects.
 ## Quick start
 
 ```bash
+git clone https://github.com/DavidCroitoru/anycubic-slicer-docker
+cd anycubic-slicer-docker
 ./install.sh
 ```
 
@@ -92,8 +94,8 @@ printers can still be added by IP.
 
 ## The watchdog
 
-The slicer exits when its (broken, see below) setup wizard is dismissed, which would leave
-the browser tab looking at an empty desktop. `/usr/local/bin/asn-watchdog` relaunches it.
+Closing the slicer -- deliberately or otherwise -- would leave the browser tab looking at an
+empty desktop. `/usr/local/bin/asn-watchdog` relaunches it.
 
 - A run shorter than `WATCHDOG_MIN_UPTIME` (20 s) counts as a crash and backs off
   exponentially up to `WATCHDOG_MAX_DELAY` (60 s), so a broken install settles at one
@@ -168,39 +170,10 @@ docker compose up -d
 This picks up whatever version is current in Anycubic's repo. To pin one, set `ASN_VERSION`
 in `.env` (e.g. `1.3.96`) — it becomes an `apt install anycubicslicernext=<version>`.
 
-## ⚠️ Status: the GUI is blocked by an upstream bug
+## Headless slicing
 
-**The container works. The application's first-run dialogs do not.**
-
-On launch, Anycubic Slicer Next opens two modal dialogs — "Setup Wizard" and
-"Param Update" — and both render as empty windows (opaque black without a compositor,
-fully transparent with one). Because they are modal, the main window ignores all input
-until they are dismissed, and closing the Setup Wizard makes the application exit. The
-net effect is that the GUI cannot currently be driven to a usable state.
-
-This is **not** caused by containerisation. The same image was run against this host's
-native Wayland/XWayland session, with a real compositor and the host GPU, and the dialogs
-were identically empty. It matches public reports of Anycubic Slicer Next on Linux, where
-users describe being "stuck on the setup wizard screen" and getting past it only by
-clicking blindly.
-
-Ruled out by testing, in case you want to pick up the thread:
-
-| Hypothesis | Result |
-| --- | --- |
-| `WEBKIT_DISABLE_DMABUF_RENDERER` / `..._COMPOSITING_MODE` | No effect, set or unset |
-| No X compositor (RGBA windows) | `xcompmgr` turns black into transparent — content still absent |
-| Xvnc reporting `0mm x 0mm` → broken DPI | `Xft.dpi`/`xrandr --dpi 96` changes nothing |
-| Software vs hardware GL | Same either way |
-| WebKit `pages://` MIME bug (reported on the AUR) | Not applicable — this image resolves `.html` to `text/html`; verified with the upstream probe script against WebKitGTK 2.52.3 |
-| Bundled fonts (the AUR package deletes them) | Removing `resources/fonts` changes nothing |
-| Missing write access to the resource tree | Was a real bug, now fixed in the image — but not the cause |
-| Pre-seeding printer presets / `privacy_version` | Wizard still appears |
-| Running as root | App does not start at all |
-
-### What does work
-
-Headless slicing through the CLI is fully functional, GPU and all:
+The slicer's CLI works inside the container, GPU and all -- useful for scripting or for
+slicing without opening the desktop at all:
 
 ```bash
 docker exec -u abc -e HOME=/config anycubic-slicer sh -c '
@@ -211,15 +184,8 @@ R=/usr/share/AnycubicSlicerNext/resources/profiles/Anycubic
   --arrange 1 --slice 0 --outputdir /config/models /config/models/your.stl'
 ```
 
-Verified end to end: a 20 mm cube produced a valid 100-layer `plate_1.gcode`.
-Run `AnycubicSlicerNext --help` in the container for the full option list.
-
-Also confirmed working: the web desktop and its auth, GPU acceleration
-(`radeonsi, krackan1`, OpenGL 4.6), the main window and its embedded WebKit views,
-`/config` and model-mount persistence.
-
-If you need a working *graphical* slicer for Anycubic printers today, `lscr.io/linuxserver/orcaslicer`
-is the same upstream engine with Anycubic profiles and no such bug.
+Verified end to end: a 20 mm cube produced a valid 100-layer `plate_1.gcode`. Run
+`AnycubicSlicerNext --help` in the container for the full option list.
 
 ## Notes and caveats
 
