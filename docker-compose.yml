@@ -28,8 +28,11 @@ services:
       - ./config:/config
       - ${MODELS_DIR:-./models}:/config/models
 
-    devices:
-      - /dev/dri:/dev/dri
+    # No `devices:` here on purpose. Docker refuses to start a container whose
+    # device does not exist, so a hardcoded /dev/dri kills every host without a
+    # render node -- an LXC with no GPU passthrough, a VM, a headless server.
+    # install.sh probes for one and writes the block into
+    # docker-compose.override.yml only when it is actually there.
 
     # WebKit and the 3D viewport both blow past the default 64MB /dev/shm.
     shm_size: "2gb"
