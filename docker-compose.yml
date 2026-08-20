@@ -1,0 +1,54 @@
+# Generated defaults live in runtime.env -- run ./install.sh to (re)create it.
+# Bridge networking, if chosen, is layered on via docker-compose.override.yml.
+
+services:
+  anycubic-slicer:
+    build:
+      context: .
+      args:
+        ASN_VERSION: ${ASN_VERSION:-}
+    image: anycubic-slicer-next:local
+    container_name: anycubic-slicer
+
+    # Host networking so the slicer's mDNS/UDP-broadcast device scan can
+    # actually see printers on the LAN. `ports:` is ignored in this mode --
+    # nginx binds directly on the host, on whatever BIND_ADDRESS in
+    # runtime.env says. install.sh writes an override file that switches to
+    # bridge networking if you pick isolation over printer discovery.
+    network_mode: host
+
+    # Everything the container reads at runtime. Keeping it in its own file
+    # (rather than compose `environment:`) is what makes optional auth work:
+    # the baseimage enables nginx basic-auth if PASSWORD merely *exists*, even
+    # empty, so "no auth" has to mean "the variable is absent".
+    env_file:
+      - ./runtime.env
+
+    volumes:
+      - ./config:/config
+      - ${MODELS_DIR:-./models}:/config/models
+
+    devices:
+      - /dev/dri:/dev/dri
+
+    # WebKit and the 3D viewport both blow past the default 64MB /dev/shm.
+    shm_size: "2gb"
+
+    security_opt:
+      # linuxserver.io baseimage docs: many desktop apps will not run under
+      # Docker's default seccomp profile.
+      - seccomp:unconfined
+      - no-new-privileges:true
+
+    cap_drop:
+      - ALL
+    cap_add:
+      # s6-overlay's init-adduser drops from root to PUID/PGID at startup.
+      - CHOWN
+      - DAC_OVERRIDE
+      - FOWNER
+      - SETGID
+      - SETUID
+      - KILL
+
+    restart: unless-stopped

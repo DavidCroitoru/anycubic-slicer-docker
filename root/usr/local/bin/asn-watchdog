@@ -1,0 +1,80 @@
+#!/usr/bin/with-contenv bash
+#
+# Keeps Anycubic Slicer Next alive on the KasmVNC desktop.
+#
+# Why: the slicer's "Setup Wizard" / "Param Update" modals are an upstream bug
+# on Linux -- they render empty, and dismissing the wizard terminates the whole
+# app, leaving the browser tab looking at a bare desktop. This relaunches it.
+#
+# Knobs (set them in docker-compose.yml under `environment:`):
+#   WATCHDOG_MIN_UPTIME   seconds; a run shorter than this counts as a crash
+#                         and triggers backoff (default 20)
+#   WATCHDOG_MAX_DELAY    ceiling for the exponential backoff (default 60)
+#   WATCHDOG_MAX_LAUNCHES 0 = unlimited (default); otherwise give up after N
+#
+# Manual override, no rebuild needed:
+#   docker exec anycubic-slicer touch /config/.watchdog-off   # stop respawning
+#   docker exec anycubic-slicer rm    /config/.watchdog-off   # resume
+# The flag is checked before every launch, so it also stops an idle backoff.
+
+APP=/usr/bin/AnycubicSlicerNext
+LOG=/config/watchdog.log
+FLAG=/config/.watchdog-off
+
+WATCHDOG_MIN_UPTIME=${WATCHDOG_MIN_UPTIME:-20}
+WATCHDOG_MAX_DELAY=${WATCHDOG_MAX_DELAY:-60}
+WATCHDOG_MAX_LAUNCHES=${WATCHDOG_MAX_LAUNCHES:-0}
+
+log() { echo "[watchdog $(date '+%Y-%m-%d %H:%M:%S')] $*" | tee -a "$LOG"; }
+
+# No render node passed in (no `devices: /dev/dri` on the container)?
+# Fall back to Mesa's software rasteriser. llvmpipe advertises GL 4.5,
+# comfortably above the GL 3.2-core floor the Orca engine needs.
+if [ ! -e /dev/dri/renderD128 ]; then
+    export LIBGL_ALWAYS_SOFTWARE=1
+    export GALLIUM_DRIVER=llvmpipe
+    log "no /dev/dri/renderD128 -- using llvmpipe software rendering"
+fi
+
+delay=2
+launches=0
+
+while true; do
+    if [ -e "$FLAG" ]; then
+        log "$FLAG present -- idling. Remove it to resume."
+        while [ -e "$FLAG" ]; do sleep 5; done
+        log "$FLAG removed -- resuming"
+        delay=2
+    fi
+
+    launches=$((launches + 1))
+    log "launch #${launches}"
+    started=$(date +%s)
+
+    "$APP"
+    rc=$?
+
+    ran=$(($(date +%s) - started))
+    log "exited rc=${rc} after ${ran}s"
+
+    # The app sometimes leaves children behind (WebKit network/web processes,
+    # GStreamer helpers). Reap them, otherwise the next instance fights the old
+    # one over the config lock and the GL context.
+    pkill -9 -u "$(id -u)" -f 'WebKitNetworkProcess|WebKitWebProcess' 2>/dev/null
+
+    if [ "$WATCHDOG_MAX_LAUNCHES" -gt 0 ] && [ "$launches" -ge "$WATCHDOG_MAX_LAUNCHES" ]; then
+        log "reached WATCHDOG_MAX_LAUNCHES=${WATCHDOG_MAX_LAUNCHES} -- giving up"
+        exit "$rc"
+    fi
+
+    if [ "$ran" -ge "$WATCHDOG_MIN_UPTIME" ]; then
+        delay=2
+    else
+        delay=$((delay * 2))
+        [ "$delay" -gt "$WATCHDOG_MAX_DELAY" ] && delay=$WATCHDOG_MAX_DELAY
+        log "short run (<${WATCHDOG_MIN_UPTIME}s) -- backing off"
+    fi
+
+    log "restarting in ${delay}s"
+    sleep "$delay"
+done

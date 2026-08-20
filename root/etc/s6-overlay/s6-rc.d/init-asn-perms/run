@@ -1,0 +1,9 @@
+#!/usr/bin/with-contenv bash
+
+# The slicer writes into its own resource tree at runtime (it creates
+# .../resources/report on startup). Build-time `abc` is uid 911, but
+# init-adduser has just remapped `abc` to PUID/PGID, so the ownership has
+# to be fixed here rather than in the Dockerfile.
+if [[ -d /usr/share/AnycubicSlicerNext ]]; then
+    lsiown -R abc:abc /usr/share/AnycubicSlicerNext
+fi

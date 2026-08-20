@@ -1,0 +1,26 @@
+#!/usr/bin/with-contenv bash
+
+# init-kasmvnc-config seeds /config/.config/openbox/{autostart,menu.xml} from
+# /defaults ONLY when the files are missing. With /config on a bind mount that
+# means an image upgrade never reaches an existing install. Migrate the stale
+# copies once; afterwards they are left alone so the user stays free to edit.
+
+OB=/config/.config/openbox
+mkdir -p "$OB"
+
+# autostart -> must exec the watchdog
+if [[ ! -f "$OB/autostart" ]] || ! grep -q asn-watchdog "$OB/autostart"; then
+    [[ -f "$OB/autostart" ]] && cp -a "$OB/autostart" "$OB/autostart.pre-watchdog.bak" \
+        && echo "[init-asn-autostart] old autostart saved as autostart.pre-watchdog.bak"
+    cp /defaults/autostart "$OB/autostart"
+    echo "[init-asn-autostart] installed watchdog autostart"
+fi
+
+# menu.xml -> must not offer a terminal emulator
+if [[ -f "$OB/menu.xml" ]] && grep -qi 'xterm' "$OB/menu.xml"; then
+    cp -a "$OB/menu.xml" "$OB/menu.xml.pre-hardening.bak"
+    cp /defaults/menu.xml "$OB/menu.xml"
+    echo "[init-asn-autostart] removed terminal entry from openbox menu"
+fi
+
+lsiown -R abc:abc "$OB"

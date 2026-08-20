@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<openbox_menu xmlns="http://openbox.org/3.4/menu">
+<menu id="root-menu" label="MENU">
+<item label="Anycubic Slicer Next" icon="/usr/share/AnycubicSlicerNext/resources/images/AnycubicSlicer.png"><action name="Execute"><command>/usr/bin/AnycubicSlicerNext</command></action></item>
+</menu>
+</openbox_menu>

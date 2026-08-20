@@ -1,0 +1,37 @@
+#!/usr/bin/with-contenv bash
+
+# Lock the web desktop down to one interface.
+#
+#   BIND_ADDRESS=127.0.0.1   reachable only from the machine running the
+#                            container (install.sh's default when auth is off)
+#   BIND_ADDRESS=0.0.0.0     every interface (the baseimage default)
+#
+# Three listeners have to be dealt with, not one. The baseimage exposes:
+#
+#   3000/3001  nginx        -- the only one that carries basic auth
+#   6901       Xvnc         -- started with `-SecurityTypes None
+#                              -disableBasicAuth -interface 0.0.0.0`
+#   6900       kclient      -- node, `http.listen(6900)`, binds everything
+#
+# 6900 and 6901 are what nginx proxies to. Left on 0.0.0.0 under
+# `network_mode: host` they are reachable from the LAN directly, which hands
+# out the full desktop with NO authentication and bypasses nginx entirely.
+# They are pinned to loopback in svc-kasmvnc/run and svc-kclient/run, which
+# this image overrides; only nginx is configurable here.
+
+NGINX_CONFIG=/etc/nginx/sites-available/default
+
+# --- 3000/3001: nginx, the authenticated front door ------------------------
+BIND="${BIND_ADDRESS:-}"
+[[ -z "$BIND" || "$BIND" == "0.0.0.0" ]] && exit 0
+[[ -f "$NGINX_CONFIG" ]] || exit 0
+
+# An IPv6 listener cannot be bound to an IPv4 address -- drop them.
+sed -i '/listen \[::\]/d' "$NGINX_CONFIG"
+
+# `listen 3000 default_server;` -> `listen 127.0.0.1:3000 default_server;`
+# Note the '#' delimiter: '|' would collide with the alternation below.
+sed -i -E "s#^([[:space:]]*listen[[:space:]]+)([0-9]+)([[:space:]]|;)#\1${BIND}:\2\3#" "$NGINX_CONFIG"
+
+echo "[init-asn-bind] nginx bound to ${BIND} only"
+grep -E '^[[:space:]]*listen' "$NGINX_CONFIG"
