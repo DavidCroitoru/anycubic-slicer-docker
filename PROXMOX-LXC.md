@@ -117,7 +117,7 @@ Everything from here runs **inside the LXC** (`pct enter 210`, or SSH in).
 
 ```bash
 apt-get update && apt-get install -y git ca-certificates
-git clone (https://github.com/DavidCroitoru/anycubic-slicer-docker) /opt/anycubic-slicer
+git clone https://github.com/DavidCroitoru/anycubic-slicer-docker /opt/anycubic-slicer
 cd /opt/anycubic-slicer
 ./install.sh
 ```
